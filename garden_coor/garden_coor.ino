@@ -33,7 +33,7 @@ void get_temp_humi(){
 
 void setup(void) {
   //初始化串口波特率
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial1.begin(9600);
 }
 
@@ -80,9 +80,10 @@ void zigbee_rec() {
   //收到节点数据
   if(zig_rec_str.length() > 20 && zig_rec_str[0] == '+' && zig_rec_str[9] == ',')
   {
-    Serial.print("receive data:");
-    Serial.print(zig_rec_str+"|"+in_temp+','+in_humi+','+in_ligh+"|");//数据转发给wifi
-    Serial.println("receive over.");
+    //Serial.print("receive data:");
+    zig_rec_str=zig_rec_str.substring(0,zig_rec_str.length()-1);
+    Serial.println(zig_rec_str+"|"+in_temp+','+in_humi+','+in_ligh+"|");//数据转发给wifi
+    //Serial.println("receive over.");
     zig_rec_str = "";
   }
   //else
