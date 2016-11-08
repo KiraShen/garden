@@ -1,38 +1,4 @@
-/**
- * BasicHTTPClient.ino
- *
- *  Created on: 24.05.2015
- *
- */
-
- String s="+ZBD=0014,{37.44,55.00,60.09,55.50,88.88}|37.50,66.21,244.93|";
-//保存环境温湿度
-
-float in_data[8];//接受解析得到的数据
-String data_str;
-void process_str(String str)
-{
-  char tmp[60];
-  char *p;
-  String temp;
-  char *delim=",}|";
-  str.toCharArray(tmp,sizeof(tmp));
-  //Serial.println(tmp);
-  p=strtok(tmp,",");
-  if(p) {
-    temp=p;
-    in_data[0]=temp.toFloat();
-  }
-  //Serial.print("pot0");
-  Serial.println(in_data[0]);
-  
-  for(int i=1;i<8;i++)
-  {
-    temp=strtok(NULL,delim);
-    in_data[i]=temp.toFloat();
-    Serial.println(in_data[i]);
-  }
-}
+#include "post_usr.h"
 
 #include <Arduino.h>
 
@@ -44,14 +10,6 @@ void process_str(String str)
 #include <HttpPacket.h>//onenet http arduino lib
 #include <ArduinoJson.h>
 
-#define BAUD_RATE 115200
-#define INTERVAL_TIME 10000
-//#define SERBER "api.heclouds.com"
-//#define SERBER_PORT 80
- #define DEVICE_ID "3497676"
- #define API_KEY "3ebQkaP3cH4gZ3QCVt7WFg5p0R8="
- //#define SENSOR_ID "temp"
-char *sensor_id[8]={"humidity0","humidity1","humidity2","humidity3","humidity4","temp","humidity","light"};
 String wifi_rec_str="";
 int rec_sta=0;
 
@@ -59,12 +17,6 @@ WiFiClient client;
 ESP8266WiFiMulti WiFiMulti;
 HttpPacketHead packetHead;
 
-char *ssid     = "Angelababy";//这里是我的wifi，你使用时修改为你要连接的wifi ssid
-char *password = "00000000";//你要连接的wifi密码
-char *host = "api.heclouds.com";//修改为你建立的Server服务端的IP地址
-//char *host = 183.230.40.33
-//port 80
-unsigned int tcpPort = 80;//修改为你建立的Server服务端的端口号
 //test
 //char *host = "192.168.1.160";
 //unsigned int tcpPort = 1000;
@@ -73,6 +25,37 @@ unsigned long lastTime = millis();
 //StaticJsonBuffer<200> jsonBuffer;
 //char jsonstr[200] ={0};
 //serial ready...
+
+
+
+
+float in_data[5];//接受解析得到的数据
+String data_str;
+String buf_str="";
+String addr_str="";
+void process_str(String str,int n)
+{
+  char tmp[60];
+  char *p;
+  String temp;
+  char *delim=",}|";
+  str.toCharArray(tmp,sizeof(tmp));
+  //Serial.println(tmp);
+  p=strtok(tmp,delim);
+  if(p) {
+    temp=p;
+    in_data[0]=temp.toFloat();
+  }
+  //Serial.print("pot0");
+  Serial.println(in_data[0]);
+  
+  for(int i=1;i<n;i++)
+  {
+    temp=strtok(NULL,delim);
+    in_data[i]=temp.toFloat();
+    Serial.println(in_data[i]);
+  }
+}
 void initSerial() {
   Serial.begin(BAUD_RATE);
   while (!Serial) {
@@ -83,7 +66,7 @@ void initSerial() {
 
 
 void initWifi(){
-    Serial.print("Connecting to ");//写几句提示，哈哈
+    Serial.print("Connecting to ");
     Serial.println(ssid);
  
     WiFi.begin(ssid, password);
@@ -100,7 +83,7 @@ void initWifi(){
 
 }
 
-void addJsonDataRecord(char id[], float value, JsonArray& array) {
+void addJsonDataRecord(String id, float value, JsonArray& array) {
   JsonObject &myJson_Json = array.createNestedObject();//myJson数据流中增加一个内置json对象
   myJson_Json["id"] = id; //为内置json对象加入键id
   JsonArray &myJson_Jsondata = myJson_Json.createNestedArray("datapoints");//内置json加入数据流
@@ -130,7 +113,7 @@ void addJsonDataRecord(char id[], float value, JsonArray& array) {
   }
   */
 }
-void postDataToOneNet(char *id,float data)
+void postDataToOneNet(String id,float data)
 {
         //合成POST请求
     StaticJsonBuffer<200> jsonBuffer;
@@ -184,14 +167,71 @@ void wifi_rec() {
       wifi_rec_str = Serial.readStringUntil('\n');
   }
   
+  //E,{11.00,22.00,33.00}
+  //S,+ZBD=0123,{111}
+  //H,+ZBD=0123,123,{11,11,11,11,11}
   //收到数据
-  if(wifi_rec_str.length() > 20 && wifi_rec_str[0] == '+' && wifi_rec_str[9] == ',')
+  if(wifi_rec_str.length() > 15 && wifi_rec_str[1] == ',')
   {
-    Serial.print("receive data:");
-    //+ZBD=0014,{0.00,55.00,60.00,55.00,88.00}|TEMP,HUMI,LIGH|
-    Serial.println(wifi_rec_str);
-    data_str=wifi_rec_str.substring(11,wifi_rec_str.length()-1);
-    process_str(data_str);
+    switch(wifi_rec_str[0]){
+      case 'S':{
+          addr_str=wifi_rec_str.substring(7,11);
+          data_str=(wifi_rec_str.substring(13+ADD,wifi_rec_str.length()-1));
+          process_str(data_str,1);
+          while (!client.connected())
+          {
+              if (!client.connect(host, tcpPort))
+              {
+                  delay(100);
+              }
+              
+          }
+          postDataToOneNet(addr_str+"S", in_data[0]);
+          break;
+      }
+      case 'E':{
+          data_str=(wifi_rec_str.substring(3,wifi_rec_str.length()-1)); 
+          process_str(data_str,3);
+            for(int i=0;i<3;i++)
+            {
+              while (!client.connected())
+              {
+                  if (!client.connect(host, tcpPort))
+                  {
+                      delay(100);
+                  }
+                  
+              }
+              //in_data[i] = random(99);
+              postDataToOneNet(enviro_id[i], in_data[i]);
+              delay(200);
+            }
+            client.stop();
+          break;
+      }
+      case 'H':{
+          addr_str=wifi_rec_str.substring(7,11);
+          data_str=(wifi_rec_str.substring(13+ADD,wifi_rec_str.length()-1)); 
+          process_str(data_str,5);
+            for(int i=0;i<5;i++)
+            {
+              while (!client.connected())
+              {
+                  if (!client.connect(host, tcpPort))
+                  {
+                      delay(100);
+                  }
+                  
+              }
+              //in_data[i] = random(99);
+              postDataToOneNet(addr_str+sensor_id[i], in_data[i]);
+              delay(200);
+            }
+            client.stop();
+            break;
+      }
+      default: {wifi_rec_str="";break;}
+    }
     rec_sta=1;
     wifi_rec_str = "";
   }
@@ -212,70 +252,16 @@ void setup() {
 void loop() {
   
   wifi_rec();
-  
+  /*
   if (lastTime > millis())
     lastTime = millis();
   if (millis() - lastTime > INTERVAL_TIME) {
     //Serial.println("new post...");
-    if(rec_sta){
-    while (!client.connected())
-    {
-        if (!client.connect(host, tcpPort))
-        {
-            //Serial.println("connect server...");
-            //client.stop();
-            delay(100);
-        }
-        
-    }
-    //int sensor_data = random(99);
-    //postDataToOneNet(sensor_data);
-    //client.print("Send this data to server");
-
-    //data_str=s.substring(11,s.length()-1);
-    //process_str(data_str);
-    
-    //update pot humidity
-    for(int i=0;i<5;i++)
-    {
-      while (!client.connected())
-      {
-          if (!client.connect(host, tcpPort))
-          {
-              //Serial.println("connect server...");
-              //client.stop();
-              delay(100);
-          }
-          
-      }
-      //in_data[i] = random(99);
-      postDataToOneNet(sensor_id[i], in_data[i]);
-      delay(200);
-    }
-    client.stop();
-    //updata temp humidity light
-    for(int i=5;i<8;i++)
-    {
-      while (!client.connected())
-      {
-          if (!client.connect(host, tcpPort))
-          {
-              //Serial.println("connect server...");
-              //client.stop();
-              delay(100);
-          }
-          
-      }
-      //in_data[i] = random(99);
-      postDataToOneNet(sensor_id[i], in_data[i]);
-      delay(200);
-    }
-    client.stop();
-    rec_sta=0;
-    }
+  
     lastTime=millis();
-    
+    //buf_str=addr_str;
   }
+  */
   
 }
 
